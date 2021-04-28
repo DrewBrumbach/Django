@@ -1,32 +1,40 @@
 from django.shortcuts import render, redirect
 from .models import Topic, Entry
 from .forms import TopicForm, EntryForm
-
+from django.contrib.auth.decorators import login_required
+from django.http import Http404
 # Create your views here.
 
 
+@login_required
 def index(request):
     ''' the home page for learning log. '''
     return render(request, 'MainApp/index.html')
 
 
 #pulled data from database, but still needs to be fed to site
+@login_required
 def topics(request):
-    topics = Topic.objects.order_by('date_added')
+    topics = Topic.objects.filter(owner=request.user).order_by('date_added')
 
     context = {'topics': topics}
     return render(request, 'MainApp/topics.html', context)
 
 
+@login_required
 def topic(request, topic_id):
     topic = Topic.objects.get(id=topic_id)
     entries = topic.entry_set.order_by('-date_added')
+
+    if topic.owner != request.user:
+        raise Http404
 
     context = {'topic': topic, 'entries': entries}
 
     return render(request, 'MainApp/topic.html', context)
 
 
+@login_required
 def new_topic(request):
     if request.method != 'POST':
         form = TopicForm()
@@ -34,7 +42,9 @@ def new_topic(request):
         form = TopicForm(data=request.POST)
 
         if form.is_valid():
-            form.save()
+            new_topic = form.save(commit=False)
+            new_topic.owner = request.user
+            new_topic.save()
 
             return redirect('MainApp:topics')
 
@@ -42,8 +52,13 @@ def new_topic(request):
     return render(request, 'MainApp/new_topic.html', context)
 
 
+@login_required
 def new_entry(request, topic_id):
     topic = Topic.objects.get(id=topic_id)
+
+    if topic.owner != request.user:
+        raise Http404
+
     if request.method != 'POST':
         form = EntryForm()
     else:
@@ -58,9 +73,14 @@ def new_entry(request, topic_id):
     return render(request, 'MainApp/new_entry.html', context)
 
 
+@login_required
 def edit_entry(request, entry_id):
     entry = Entry.objects.get(id=entry_id)  #gives particular instance of entry
     topic = entry.topic
+
+    if topic.owner != request.user:
+        raise Http404
+
     if request.method != 'POST':  #meaning method is GET, loading data
         form = EntryForm(instance=entry)
     else:
